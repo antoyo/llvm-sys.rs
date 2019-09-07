@@ -1,10 +1,8 @@
 extern crate cc;
 #[macro_use]
 extern crate lazy_static;
-extern crate regex;
 extern crate semver;
 
-use regex::Regex;
 use semver::Version;
 use std::env;
 use std::ffi::OsStr;
@@ -12,10 +10,10 @@ use std::io::{self, ErrorKind};
 use std::path::PathBuf;
 use std::process::Command;
 
-/// Environment variables that can guide compilation
-///
-/// When adding new ones, they should also be added to main() to force a
-/// rebuild if they are changed.
+// Environment variables that can guide compilation
+//
+// When adding new ones, they should also be added to main() to force a
+// rebuild if they are changed.
 lazy_static! {
     /// A single path to search for LLVM in (containing bin/llvm-config)
     static ref ENV_LLVM_PREFIX: String =
@@ -220,17 +218,18 @@ fn llvm_version<S: AsRef<OsStr>>(binary: S) -> io::Result<Version> {
     // LLVM isn't really semver and uses version suffixes to build
     // version strings like '3.8.0svn', so limit what we try to parse
     // to only the numeric bits.
-    let re = Regex::new(r"^(?P<major>\d+)\.(?P<minor>\d+)(?:\.(?P<patch>\d+))??").unwrap();
-    let c = re
-        .captures(&version_str)
-        .expect("Could not determine LLVM version from llvm-config.");
+    let mut parts = version_str.split('.');
+    let major = parts.next().expect("Could not determine LLVM version from llvm-config.");
+    let minor = parts.next().expect("Could not determine LLVM version from llvm-config.");
+    let patch = parts.next()
+        .map(|patch| patch.chars().take_while(|&c| char::is_digit(c, 10))
+             .collect::<String>().parse().expect("Could not determine LLVM version from llvm-config.")
+        )
+        .unwrap_or(0);
 
     // some systems don't have a patch number but Version wants it so we just append .0 if it isn't
     // there
-    let s = match c.name("patch") {
-        None => format!("{}.0", &c[0]),
-        Some(_) => c[0].to_string(),
-    };
+    let s = format!("{}.{}.{}", major, minor, patch);
     Ok(Version::parse(&s).unwrap())
 }
 
